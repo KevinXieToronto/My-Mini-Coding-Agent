@@ -10,8 +10,15 @@
     "type": "git",
     "url": "git+https://github.com/KevinXieToronto/My-Mini-Coding-Agent.git"
   },
-  "keywords": [],
-  "author": "",
+  "files": [
+    "index.js"
+  ],
+  "keywords": [
+    "coding-agent",
+    "cli",
+    "ai"
+  ],
+  "author": "Kevin Xie",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/KevinXieToronto/My-Mini-Coding-Agent/issues"
