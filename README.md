@@ -1,17 +1,17 @@
-# my-mini-coding-agent
+# @kevin-xie-toronto/my-mini-coding-agent
 
 My Mini Coding Agent.
 
 ## Installation
 
 ```bash
-npm install my-mini-coding-agent
+npm install @kevin-xie-toronto/my-mini-coding-agent
 ```
 
 ## Usage
 
 ```js
-const { greet } = require('my-mini-coding-agent');
+const { greet } = require('@kevin-xie-toronto/my-mini-coding-agent');
 
 console.log(greet('world')); // "Hello, world!"
 ```
