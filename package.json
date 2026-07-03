@@ -2,9 +2,11 @@
   "name": "@kevin.xie.toronto/my-mini-coding-agent",
   "version": "1.0.0",
   "description": "My Mini Coding Agent",
-  "main": "index.js",
+  "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:watch": "node --test --watch",
+    "test:coverage": "node --test --experimental-test-coverage"
   },
   "repository": {
     "type": "git",
@@ -19,7 +21,11 @@
     "ai"
   ],
   "author": "Kevin Xie",
-  "license": "ISC",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.9.0",
   "bugs": {
     "url": "https://github.com/KevinXieToronto/My-Mini-Coding-Agent/issues"
   },

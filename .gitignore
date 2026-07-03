@@ -144,3 +144,9 @@ vite.config.ts.timestamp-*
 
 # JetBrains IDE
 .idea/
+
+# Build output
+dist-web/
+
+# macOS
+.DS_Store

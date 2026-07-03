@@ -1,0 +1,13 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+overrides:
+  ssh2@1.17.0>cpu-features: '-'
+  ssh2@1.17.0>nan: '-'
+
+importers:
+
+  .: {}
