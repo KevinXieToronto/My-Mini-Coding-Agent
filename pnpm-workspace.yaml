@@ -11,3 +11,6 @@ overrides:
 
 onlyBuiltDependencies:
   - electron
+
+allowBuilds:
+  esbuild: true
