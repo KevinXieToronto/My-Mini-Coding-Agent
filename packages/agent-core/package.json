@@ -30,6 +30,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@kevin.xie.toronto/llm-provider-abstraction": "workspace:^",
     "@modelcontextprotocol/sdk": "1.29.0",
     "undici": "7.27.1",
     "zod": "catalog:"

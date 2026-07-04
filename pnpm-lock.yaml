@@ -73,6 +73,9 @@ importers:
       '@kevin.xie.toronto/agent-core':
         specifier: workspace:^
         version: link:../../packages/agent-core
+      '@kevin.xie.toronto/llm-provider-abstraction':
+        specifier: workspace:^
+        version: link:../../packages/llm_provider_abstraction
       '@types/semver':
         specifier: ^7.7.0
         version: 7.7.0
@@ -83,6 +86,9 @@ importers:
 
   packages/agent-core:
     dependencies:
+      '@kevin.xie.toronto/llm-provider-abstraction':
+        specifier: workspace:^
+        version: link:../llm_provider_abstraction
       '@modelcontextprotocol/sdk':
         specifier: 1.29.0
         version: 1.29.0(zod@4.3.6)
