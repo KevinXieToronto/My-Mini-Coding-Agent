@@ -1,11 +1,11 @@
 {
-  "name": "@kevin.xie.toronto/my-mini-coding-agent",
+  "name": "@kevin.xie.toronto/agent-core",
   "version": "1.0.0",
   "license": "MIT",
   "type": "module",
   "files": ["dist"],
   "imports": {
-    "#/*": ["./src/*.ts", "./src/*/index.ts"]
+    "#*": ["./src/*.ts", "./src/*/index.ts"]
   },
   "exports": {
     ".": {

@@ -14,3 +14,4 @@ onlyBuiltDependencies:
 
 allowBuilds:
   esbuild: true
+  node-pty: true

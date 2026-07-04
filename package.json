@@ -4,6 +4,9 @@
   "description": "My Mini Coding Agent",
   "type": "module",
   "scripts": {
+    "build": "pnpm -r build",
+    "dev:cli": "pnpm --dir apps/coding-agent-code dev",
+    "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"

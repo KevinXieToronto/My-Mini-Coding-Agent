@@ -1,0 +1,38 @@
+{
+  "name": "@kevin.xie.toronto/my-mini-coding-agent",
+  "version": "1.0.0",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "kimi": "dist/main.mjs"
+  },
+  "files": ["dist", "README.md"],
+  "imports": {
+    "#*": ["./src/*.ts", "./src/*/index.ts"]
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "dev": "tsx ./src/main.ts",
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "smoke": "node scripts/smoke.mjs",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^13.1.0"
+  },
+  "devDependencies": {
+    "@kevin.xie.toronto/agent-core": "workspace:^"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.1.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
