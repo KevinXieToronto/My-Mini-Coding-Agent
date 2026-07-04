@@ -4,9 +4,9 @@
   "description": "My Mini Coding Agent",
   "type": "module",
   "scripts": {
-    "test": "node --test",
-    "test:watch": "node --test --watch",
-    "test:coverage": "node --test --experimental-test-coverage"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "repository": {
     "type": "git",
