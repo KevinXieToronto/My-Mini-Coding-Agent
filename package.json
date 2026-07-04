@@ -1,6 +1,7 @@
 {
   "name": "@kevin.xie.toronto/my-mini-coding-agent",
   "version": "1.0.0",
+  "private": true,
   "description": "My Mini Coding Agent",
   "type": "module",
   "scripts": {

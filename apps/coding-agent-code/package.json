@@ -1,14 +1,20 @@
 {
-  "name": "@kevin.xie.toronto/my-mini-coding-agent",
+  "name": "@kevin.xie.toronto/coding-agent-code",
   "version": "1.0.0",
   "license": "MIT",
   "type": "module",
   "bin": {
-    "kimi": "dist/main.mjs"
+    "coding-agent": "dist/main.mjs"
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "imports": {
-    "#*": ["./src/*.ts", "./src/*/index.ts"]
+    "#*": [
+      "./src/*.ts",
+      "./src/*/index.ts"
+    ]
   },
   "publishConfig": {
     "access": "public",
@@ -27,7 +33,8 @@
     "commander": "^13.1.0"
   },
   "devDependencies": {
-    "@kevin.xie.toronto/agent-core": "workspace:^"
+    "@kevin.xie.toronto/agent-core": "workspace:^",
+    "@types/semver": "^7.7.0"
   },
   "optionalDependencies": {
     "node-pty": "^1.1.0"

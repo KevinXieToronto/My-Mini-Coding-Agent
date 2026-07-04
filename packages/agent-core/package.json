@@ -3,9 +3,14 @@
   "version": "1.0.0",
   "license": "MIT",
   "type": "module",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "imports": {
-    "#*": ["./src/*.ts", "./src/*/index.ts"]
+    "#*": [
+      "./src/*.ts",
+      "./src/*/index.ts"
+    ]
   },
   "exports": {
     ".": {
@@ -25,6 +30,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "undici": "7.27.1",
     "zod": "catalog:"
   }
 }
