@@ -22,9 +22,18 @@ export const AgentConfigSchema = z.object({
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
 export interface AgentEvents {
+  /** The complete assistant text for the turn (streamed or not). */
   onText?(text: string): void;
   onToolCall?(name: string, args: string): void;
   onToolResult?(name: string, result: string): void;
+  /** A streamed fragment of assistant text, in order. Fires before onText. */
+  onTextDelta?(textDelta: string): void;
+  /**
+   * Asked before every tool execution. Return false to block the tool;
+   * the model receives a denial message as the tool result and can adapt.
+   * Omit the callback to allow everything (Part 2 behavior).
+   */
+  canUseTool?(name: string, args: string): Promise<boolean> | boolean;
 }
 
 export class Agent {
@@ -47,10 +56,20 @@ export class Agent {
     this.messages.push({ role: 'user', content: prompt });
 
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
-      const response = await this.provider.chat({
+/*      const response = await this.provider.chat({
         messages: this.messages,
         tools: this.tools.specs(),
-      });
+      });*/
+      const request = {
+        messages: this.messages,
+        tools: this.tools.specs(),
+      };
+      const response =
+        this.provider.stream !== undefined
+          ? await this.provider.stream(request, (textDelta) => {
+            this.events.onTextDelta?.(textDelta);
+          })
+          : await this.provider.chat(request);
 
       this.messages.push({
         role: 'assistant',
@@ -66,9 +85,24 @@ export class Agent {
         return response.content ?? '';
       }
 
-      for (const call of response.toolCalls) {
+     /* for (const call of response.toolCalls) {
         this.events.onToolCall?.(call.name, call.arguments);
         const result = await this.tools.dispatch(call.name, call.arguments);
+        this.events.onToolResult?.(call.name, result);
+        this.messages.push({
+          role: 'tool',
+          toolCallId: call.id,
+          content: result,
+        });
+      }*/
+      for (const call of response.toolCalls) {
+        this.events.onToolCall?.(call.name, call.arguments);
+        const approved =
+          (await this.events.canUseTool?.(call.name, call.arguments)) ?? true;
+        const result = approved
+          ? await this.tools.dispatch(call.name, call.arguments)
+          : `Error: the user denied permission to run ${call.name}. ` +
+          'Do not retry the same call; ask the user or try a different approach.';
         this.events.onToolResult?.(call.name, result);
         this.messages.push({
           role: 'tool',

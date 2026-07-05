@@ -37,7 +37,17 @@ export interface ChatResponse {
   finishReason: string;
 }
 
+/** Called once per streamed fragment of assistant text. */
+export type StreamDeltaHandler = (textDelta: string) => void;
+
 /** The single interface agent-core depends on. Everything else is private. */
 export interface ChatProvider {
   chat(request: ChatRequest): Promise<ChatResponse>;
+  /**
+   * Optional streaming variant. Emits assistant text fragments through
+   * `onDelta` as they arrive, and resolves with the same ChatResponse
+   * that chat() would have returned. Providers that cannot stream simply
+   * omit this; callers fall back to chat().
+   */
+  stream?(request: ChatRequest, onDelta: StreamDeltaHandler): Promise<ChatResponse>;
 }
