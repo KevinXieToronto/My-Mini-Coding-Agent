@@ -20,7 +20,7 @@ export interface AgentHarnessOptions {
 
 export interface AgentHarness {
   /** Run one task to completion; resolves with the final assistant text. */
-  runTask(prompt: string): Promise<string>;
+  runTask(prompt: string, signal?: AbortSignal): Promise<string>;   // ← new: signal
   /** Add a custom tool alongside the builtins. */
   registerTool(tool: ToolDefinition): void;
 }
@@ -47,7 +47,7 @@ export function createAgentHarness(
   const agent = new Agent(provider, config, events);
 
   return {
-    runTask: (prompt) => agent.run(prompt),
+    runTask: (prompt, signal) => agent.run(prompt, signal),          // ← new: forward signal
     registerTool: (tool) => agent.tools.register(tool),
   };
 }

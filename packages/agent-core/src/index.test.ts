@@ -2,7 +2,7 @@ import type { ChatProvider, ChatResponse } from '@kevin.xie.toronto/llm-provider
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { Agent, AgentConfigSchema, ToolRegistry } from './index';
+import { AbortError, Agent, AgentConfigSchema, ToolRegistry } from './index';
 
 /** A provider that replays a scripted sequence of responses. */
 function scriptedProvider(responses: ChatResponse[]): ChatProvider {
@@ -247,6 +247,18 @@ describe('Agent context compaction', () => {
       if (message.role !== 'tool') return;
       expect(agent.history[index - 1]?.role).toBe('assistant');
     });
+  });
+});
+
+describe('Agent cancellation', () => {
+  const config = AgentConfigSchema.parse({ name: 'test' });
+
+  it('throws AbortError when the signal is already aborted', async () => {
+    const provider = scriptedProvider([{ content: 'never', toolCalls: [], finishReason: 'stop' }]);
+    const agent = new Agent(provider, config);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(agent.run('hi', controller.signal)).rejects.toBeInstanceOf(AbortError);
   });
 });
 

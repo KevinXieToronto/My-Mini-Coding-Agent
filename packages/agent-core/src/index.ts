@@ -7,6 +7,14 @@ import { ToolRegistry } from '#tools/types';
 export * from '#tools/types';
 export * from '#tools/builtin';
 
+/** Thrown by run() when its AbortSignal fires. Callers catch it by name. */
+export class AbortError extends Error {
+  constructor() {
+    super('aborted');
+    this.name = 'AbortError';
+  }
+}
+
 const COMPACTION_PROMPT =
   'You summarize a coding-agent conversation so it can continue in fewer tokens. ' +
   'Write a compact but complete summary: the original task, key decisions, files ' +
@@ -119,7 +127,7 @@ export class Agent {
   }
 
   /** Run one user prompt to completion (possibly many LLM round-trips). */
-  async run(prompt: string): Promise<string> {
+  async run(prompt: string, signal?: AbortSignal): Promise<string> {   // ← new: signal
     this.messages.push({ role: 'user', content: prompt });
 
     for (let turn = 0; turn < this.config.maxTurns; turn++) {
@@ -129,6 +137,7 @@ export class Agent {
       });*/
 
       await this.maybeCompact(); // 在循环中触发
+      if (signal?.aborted) throw new AbortError();                     // ← new: cancel between turns
 
       const request = {
         messages: this.messages,
@@ -167,6 +176,7 @@ export class Agent {
         });
       }*/
       for (const call of response.toolCalls) {
+        if (signal?.aborted) throw new AbortError();                   // ← new: cancel before a tool
         this.events.onToolCall?.(call.name, call.arguments);
         const approved =
           (await this.events.canUseTool?.(call.name, call.arguments)) ?? true;
@@ -183,6 +193,6 @@ export class Agent {
       }
     }
 
-    return '[agent stopped: reached max turns]';
+    return '[coding-agent stopped: reached max turns]';
   }
 }
