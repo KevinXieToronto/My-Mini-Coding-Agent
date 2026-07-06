@@ -1,6 +1,7 @@
 import {
   connectMcpServer,
   createAgentHarness,
+  discoverSkills,
   loadHarnessOptionsFromEnv,
   loadMcpConfig,
 } from '@kevin.xie.toronto/coding-agent-sdk';
@@ -103,6 +104,9 @@ class CodingAgentTui {
     });
     this.mcpConnections.push(...connections);
     this.mcpToolCount = toolCount;
+    for (const skill of this.options.skills ?? []) {
+      this.transcript.addNotice(`⚙ skill: ${skill.name} — ${skill.description}`);
+    }
     this.scheduleRender();
 
     await done;
@@ -401,6 +405,9 @@ async function runOneShot(options: AgentHarnessOptions, prompt: string): Promise
   const { connections } = await registerMcpServers(harness, (line) =>
     console.log(chalk.dim(`  ${line}`)),
   );
+  for (const skill of options.skills ?? []) {
+    console.log(chalk.dim(`  ⚙ skill: ${skill.name}`));
+  }
   try {
     await harness.runTask(prompt);
   } finally {
@@ -415,6 +422,11 @@ export async function startTui(prompt?: string): Promise<void> {
     process.exit(1);
   }
 
+  const options: AgentHarnessOptions = {
+    ...loaded.options,
+    skills: discoverSkills(),
+  };
+
   // A full-screen UI only makes sense on a real terminal. One-shot mode
   // (`coding-agent "fix the test"`) and piped stdin fall back to plain output.
   if (prompt !== undefined || !process.stdin.isTTY) {
@@ -422,9 +434,9 @@ export async function startTui(prompt?: string): Promise<void> {
       console.error(chalk.red('no prompt given and stdin is not a TTY.'));
       process.exit(1);
     }
-    await runOneShot(loaded.options, prompt);
+    await runOneShot(options, prompt);
     return;
   }
 
-  await new CodingAgentTui(loaded.options).start();
+  await new CodingAgentTui(options).start();
 }

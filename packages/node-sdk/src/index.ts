@@ -22,3 +22,7 @@ export type {
   McpServerConfig,
   McpStdioConfig,
 } from '#mcp/index';
+
+// Skills: progressive-disclosure playbooks discovered from .agent/skills.
+export { discoverSkills, renderSkillsCatalog, createSkillTool } from '#skills/index';
+export type { Skill } from '#skills/index';
