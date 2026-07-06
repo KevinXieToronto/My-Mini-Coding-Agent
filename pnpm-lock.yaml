@@ -113,6 +113,9 @@ importers:
       '@kevin.xie.toronto/llm-provider-abstraction':
         specifier: workspace:^
         version: link:../llm_provider_abstraction
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.3.6)
       zod:
         specifier: 'catalog:'
         version: 4.3.6

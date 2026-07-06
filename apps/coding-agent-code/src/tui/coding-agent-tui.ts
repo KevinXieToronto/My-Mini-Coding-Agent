@@ -4,8 +4,10 @@ import type { Interface } from 'node:readline/promises';
 import {
   createAgentHarness,
   loadHarnessOptionsFromEnv,
+  connectMcpServer,
+  loadMcpConfig,
 } from '@kevin.xie.toronto/coding-agent-sdk';
-import type { AgentHarness } from '@kevin.xie.toronto/coding-agent-sdk';
+import type { AgentHarness, McpConnection } from '@kevin.xie.toronto/coding-agent-sdk';
 import chalk from 'chalk';
 
 /** Read-only tools never need approval. */
@@ -78,6 +80,7 @@ export async function startTui(prompt?: string): Promise<void> {
   // tasks from it, and canUseTool reads approvals from it mid-turn.
   const readline = createInterface({ input: process.stdin, output: process.stdout });
   const harness = createHarness(readline);
+  const mcpConnections = await registerMcpServers(harness);
 
   try {
     // One-shot mode: `coding-agent "fix the failing test"`
@@ -99,6 +102,33 @@ export async function startTui(prompt?: string): Promise<void> {
       }
     }
   } finally {
+    // Terminate child processes before we exit, or they linger as orphans.
+    await Promise.allSettled(mcpConnections.map((connection) => connection.close()));
     readline.close();
   }
+}
+
+/**
+ * Start every server in mcp.json and register its tools onto the harness.
+ * A server that fails to start is logged and skipped — one broken server
+ * must not take down the whole session.
+ */
+async function registerMcpServers(harness: AgentHarness): Promise<McpConnection[]> {
+  const { mcpServers } = loadMcpConfig();
+  const connections: McpConnection[] = [];
+  for (const [name, config] of Object.entries(mcpServers)) {
+    try {
+      const connection = await connectMcpServer(name, config);
+      for (const tool of connection.tools) harness.registerTool(tool);
+      connections.push(connection);
+      console.log(
+        chalk.dim(`  ⧉ mcp: ${name} — ${connection.tools.length} tool(s)`),
+      );
+    } catch (error) {
+      console.error(
+        chalk.red(`  ⧉ mcp: ${name} failed to start — ${error instanceof Error ? error.message : String(error)}`),
+      );
+    }
+  }
+  return connections;
 }

@@ -12,3 +12,7 @@ export type {
   ChatProvider,
   ChatResponse,
 } from '@kevin.xie.toronto/llm-provider-abstraction';
+
+// MCP: connect to external tool servers and register their tools.
+export { connectMcpServer, loadMcpConfig } from '#mcp/index';
+export type { McpConnection, McpJson, McpStdioConfig } from '#mcp/index';

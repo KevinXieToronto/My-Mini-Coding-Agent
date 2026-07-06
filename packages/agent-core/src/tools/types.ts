@@ -5,6 +5,13 @@ export interface ToolDefinition<Schema extends z.ZodType = z.ZodType> {
   name: string;
   description: string;
   schema: Schema;
+  /**
+   * Precomputed JSON Schema for the tool's parameters. When set, it is sent
+   * to the model verbatim instead of deriving one from `schema`. Used by tools
+   * whose schema originates outside zod — MCP servers advertise JSON Schema
+   * directly, so there is no zod type to convert.
+   */
+  parameters?: Record<string, unknown>;
   execute(args: z.infer<Schema>): Promise<string>;
 }
 
@@ -13,7 +20,8 @@ export function toToolSpec(tool: ToolDefinition): ToolSpec {
   return {
     name: tool.name,
     description: tool.description,
-    parameters: z.toJSONSchema(tool.schema) as Record<string, unknown>,
+    parameters:
+      tool.parameters ?? (z.toJSONSchema(tool.schema) as Record<string, unknown>),
   };
 }
 

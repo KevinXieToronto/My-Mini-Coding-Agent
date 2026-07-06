@@ -249,3 +249,23 @@ describe('Agent context compaction', () => {
     });
   });
 });
+
+it('advertises raw parameters verbatim when provided, ignoring the zod schema', () => {
+  const registry = new ToolRegistry();
+  const rawParameters = {
+    type: 'object',
+    properties: { path: { type: 'string', description: 'file to read' } },
+    required: ['path'],
+  };
+  registry.register({
+    name: 'external_tool',
+    description: 'comes from an MCP server',
+    schema: z.record(z.string(), z.unknown()),
+    parameters: rawParameters,
+    execute: async () => 'ok',
+  });
+
+  const spec = registry.specs().find((s) => s.name === 'external_tool');
+  // The model sees the server's schema, not `{}` derived from z.record.
+  expect(spec?.parameters).toEqual(rawParameters);
+});
