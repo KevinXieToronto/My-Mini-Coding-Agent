@@ -91,6 +91,29 @@ function renderBlock(
   return wrapped.map((line, i) => color((i === 0 ? prefix : indent) + line));
 }
 
+/**
+ * Draw a rounded box around `content`, sized to the longest line but capped at
+ * the terminal width. Lines that would overflow are truncated with an ellipsis
+ * so a long path can never break the frame. Content is rendered verbatim (no
+ * wrapping) so box-drawing and logo glyphs survive intact.
+ */
+export function renderFrame(content: string[], width: number): string[] {
+  // Reserve 4 columns for the "│ " … " │" edges; keep at least 1 inner column.
+  const maxInner = Math.max(1, width - 4);
+  const longest = content.reduce((max, line) => Math.max(max, line.length), 0);
+  const inner = Math.min(longest, maxInner);
+
+  const border = '─'.repeat(inner + 2);
+  const out = [chalk.cyan(`╭${border}╮`)];
+  for (const line of content) {
+    const clipped = line.length > inner ? `${line.slice(0, inner - 1)}…` : line;
+    const padded = clipped.padEnd(inner);
+    out.push(`${chalk.cyan('│')} ${padded} ${chalk.cyan('│')}`);
+  }
+  out.push(chalk.cyan(`╰${border}╯`));
+  return out;
+}
+
 /** Turn the block list into terminal lines. Styling is applied here, not stored. */
 export function renderTranscript(blocks: readonly Block[], width: number): string[] {
   const lines: string[] = [];

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Transcript, wrap } from '#tui/transcript';
+import { Transcript, renderFrame, wrap } from '#tui/transcript';
 
 describe('Transcript', () => {
   it('streams deltas into one assistant block until it ends', () => {
@@ -32,5 +32,30 @@ describe('wrap', () => {
   it('hard-wraps long lines and preserves explicit newlines', () => {
     expect(wrap('abcdef', 3)).toEqual(['abc', 'def']);
     expect(wrap('a\nb', 10)).toEqual(['a', 'b']);
+  });
+});
+
+describe('renderFrame', () => {
+  // Strip ANSI colour codes so assertions don't depend on chalk's TTY detection.
+  // eslint-disable-next-line no-control-regex
+  const plain = (s: string): string => s.replace(/\x1b\[[0-9;]*m/g, '');
+
+  it('boxes content with rounded borders and vertical edges', () => {
+    const out = renderFrame(['hi'], 40).map(plain);
+    expect(out[0]?.startsWith('╭')).toBe(true);
+    expect(out[0]?.endsWith('╮')).toBe(true);
+    expect(out[out.length - 1]?.startsWith('╰')).toBe(true);
+    expect(out[out.length - 1]?.endsWith('╯')).toBe(true);
+    // The one content row is wrapped in "│ … │" and padded to the box width.
+    expect(out[1]).toBe('│ hi │');
+    // Top border spans the same width as the content row.
+    expect(out[0]?.length).toBe(out[1]?.length);
+  });
+
+  it('truncates a line that would overflow the width with an ellipsis', () => {
+    const width = 12;
+    const out = renderFrame(['a'.repeat(50)], width).map(plain);
+    for (const line of out) expect(line.length).toBeLessThanOrEqual(width);
+    expect(out[1]).toContain('…');
   });
 });

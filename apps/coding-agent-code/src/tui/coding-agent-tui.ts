@@ -10,12 +10,15 @@ import type {
   AgentHarnessOptions,
   McpConnection,
 } from '@kevin.xie.toronto/coding-agent-sdk';
+import { randomUUID } from 'node:crypto';
+
 import chalk from 'chalk';
 
 import { Editor } from '#tui/editor';
 import { Screen } from '#tui/screen';
 import type { Key } from '#tui/screen';
-import { Transcript, renderTranscript } from '#tui/transcript';
+import { Transcript, renderFrame, renderTranscript } from '#tui/transcript';
+import { VERSION } from '#version';
 
 /** Read-only tools never need approval. */
 const AUTO_APPROVED = new Set(['read_file', 'list_dir']);
@@ -66,6 +69,9 @@ class CodingAgentTui {
   private readonly editor = new Editor();
   private readonly sessionApproved = new Set<string>();
   private readonly mcpConnections: McpConnection[] = [];
+  private readonly sessionId = `session_${randomUUID()}`;
+  /** The welcome-frame content, pinned as a fixed header (not scrollback). */
+  private readonly banner: string[];
 
   private mcpToolCount = 0;
   private running = false;
@@ -80,6 +86,7 @@ class CodingAgentTui {
   constructor(private readonly options: AgentHarnessOptions) {
     this.harness = createAgentHarness(options, this.events());
     this.screen = new Screen(this.handleKey, this.scheduleRender);
+    this.banner = this.bannerLines();
   }
 
   /** Enter the alternate screen, connect MCP, and run until the user quits. */
@@ -88,7 +95,6 @@ class CodingAgentTui {
       this.resolveDone = resolve;
     });
     this.screen.start();
-    this.transcript.addNotice('coding-agent — type a task · /exit to quit · Ctrl-C to cancel');
     this.scheduleRender();
 
     const { connections, toolCount } = await registerMcpServers(this.harness, (line) => {
@@ -100,6 +106,25 @@ class CodingAgentTui {
     this.scheduleRender();
 
     await done;
+  }
+
+  /** The welcome-frame content: geometric logo, greeting, and session context. */
+  private bannerLines(): string[] {
+    const model = this.options.model ?? 'gpt-4o-mini';
+    const field = (label: string, value: string): string =>
+      `${`${label}:`.padEnd(10)} ${value}`;
+    // Logo art (right-aligned triangle) padded to a fixed cell so the text
+    // beside it lines up in one column.
+    const logo = (art: string, text: string): string => `${art.padEnd(9)}${text}`;
+    return [
+      logo('  ◢◣', 'My Mini Code Agent'),
+      logo(' ◢██◣', 'Welcome! Send /help for help information.'),
+      logo('◢████◣', ''),
+      field('Directory', process.cwd()),
+      field('Session', this.sessionId),
+      field('Model', model),
+      field('Version', VERSION),
+    ];
   }
 
   // --- harness events → transcript / spinner ---------------------------------
@@ -300,18 +325,20 @@ class CodingAgentTui {
     const width = this.screen.columns;
     const height = this.screen.rows;
 
+    const header = renderFrame(this.banner, width);
     const body = renderTranscript(this.transcript.all, width);
     const status = this.renderStatus(width);
     const input = this.renderInput();
 
-    // Reserve the bottom two rows for status + input; pin the transcript above.
-    const viewport = Math.max(1, height - 2);
+    // The banner is pinned at the top and the input + status bar at the bottom
+    // (status is the very last row); the transcript scrolls between them.
+    const viewport = Math.max(1, height - header.length - 2);
     const visible = body.slice(Math.max(0, body.length - viewport));
     const padding = Array<string>(Math.max(0, viewport - visible.length)).fill('');
-    const lines = [...padding, ...visible, status, input];
+    const lines = [...header, ...padding, ...visible, input, status];
 
-    // Cursor sits on the input row (the last row) at the editor's position.
-    const cursorRow = height;
+    // Cursor sits on the input row — now the second-to-last row, above status.
+    const cursorRow = height - 1;
     const cursorCol =
       this.approval !== undefined ? input.length + 1 : 2 + this.editor.cursor + 1;
     this.screen.render(lines, cursorRow, cursorCol);
