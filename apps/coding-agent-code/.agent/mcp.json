@@ -3,6 +3,9 @@
     "filesystem": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+    },
+    "everything": {
+      "url": "http://localhost:3001/mcp"
     }
   }
 }

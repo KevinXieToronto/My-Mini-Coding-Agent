@@ -15,4 +15,10 @@ export type {
 
 // MCP: connect to external tool servers and register their tools.
 export { connectMcpServer, loadMcpConfig } from '#mcp/index';
-export type { McpConnection, McpJson, McpStdioConfig } from '#mcp/index';
+export type {
+  McpConnection,
+  McpHttpConfig,
+  McpJson,
+  McpServerConfig,
+  McpStdioConfig,
+} from '#mcp/index';

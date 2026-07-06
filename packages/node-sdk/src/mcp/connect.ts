@@ -1,9 +1,15 @@
 import type { ToolDefinition } from '@kevin.xie.toronto/agent-core';
 import { z } from 'zod';
 
+import { HttpMcpClient } from './http-client';
 import { StdioMcpClient } from './stdio-client';
 import { qualifyMcpToolName } from './tool-naming';
-import type { McpClient, McpStdioConfig, McpToolResult } from './types';
+import {
+  isHttpConfig,
+  type McpClient,
+  type McpServerConfig,
+  type McpToolResult,
+} from './types';
 
 export interface McpConnection {
   /** Tools ready to hand to `harness.registerTool`. */
@@ -13,14 +19,25 @@ export interface McpConnection {
 }
 
 /**
- * Connect to one stdio MCP server, list its tools, and wrap each as a
- * ToolDefinition. `clientFactory` is the test seam: inject a fake MCPClient
- * and no child process is spawned.
+ * The default transport picker: HTTP config → HttpMcpClient, otherwise a
+ * spawned StdioMcpClient. This one branch is the *only* place the two
+ * transports diverge; everything after `connect()` is identical.
+ */
+function defaultClientFactory(config: McpServerConfig): McpClient {
+  return isHttpConfig(config)
+    ? new HttpMcpClient(config)
+    : new StdioMcpClient(config);
+}
+
+/**
+ * Connect to one MCP server — stdio or HTTP — list its tools, and wrap each as
+ * a ToolDefinition. `clientFactory` is the test seam: inject a fake McpClient
+ * and no process is spawned and no socket is opened.
  */
 export async function connectMcpServer(
   serverName: string,
-  config: McpStdioConfig,
-  clientFactory: (config: McpStdioConfig) => McpClient = (c) => new StdioMcpClient(c),
+  config: McpServerConfig,
+  clientFactory: (config: McpServerConfig) => McpClient = defaultClientFactory,
 ): Promise<McpConnection> {
   const client = clientFactory(config);
   await client.connect();

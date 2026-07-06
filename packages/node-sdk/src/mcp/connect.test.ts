@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createAgentHarness } from '../harness';
 import { connectMcpServer } from './connect';
-import type { McpClient } from './types';
+import { isHttpConfig, type McpClient, type McpServerConfig } from './types';
 
 /** A scripted MCP server: fixed tool list, records the calls it receives. */
 function fakeClient(overrides: Partial<McpClient> = {}): McpClient & { calls: Array<[string, unknown]> } {
@@ -85,6 +85,49 @@ describe('MCP tools dispatch through the harness like builtins', () => {
     for (const tool of connection.tools) harness.registerTool(tool);
 
     expect(await harness.runTask('read a.txt')).toBe('the file says hi');
+    expect(client.calls).toEqual([['read_file', { path: 'a.txt' }]]);
+  });
+});
+
+describe('config discrimination', () => {
+  it('identifies HTTP configs by the presence of a url', () => {
+    const http: McpServerConfig = { url: 'https://example.com/mcp' };
+    const stdio: McpServerConfig = { command: 'npx', args: ['server'] };
+    expect(isHttpConfig(http)).toBe(true);
+    expect(isHttpConfig(stdio)).toBe(false);
+  });
+});
+
+describe('connectMcpServer transport selection', () => {
+  it('passes the exact config through to the injected factory', async () => {
+    const httpConfig: McpServerConfig = {
+      url: 'https://example.com/mcp',
+      headers: { Authorization: 'Bearer t' },
+    };
+    let seen: McpServerConfig | undefined;
+    await connectMcpServer('remote', httpConfig, (config) => {
+      seen = config;
+      return fakeClient();
+    });
+    // The wrapper doesn't inspect or mutate config — the factory owns the
+    // stdio-vs-http choice, and it receives the entry verbatim.
+    expect(seen).toBe(httpConfig);
+  });
+
+  it('wraps an HTTP server the same way it wraps a stdio one', async () => {
+    const client = fakeClient();
+    const connection = await connectMcpServer(
+      'remote',
+      { url: 'https://example.com/mcp' },
+      () => client,
+    );
+
+    // Same qualified name, same verbatim schema, same original-name callback —
+    // proof that nothing downstream of connect() cares about the transport.
+    expect(connection.tools[0]!.name).toBe('mcp__remote__read_file');
+    expect(await connection.tools[0]!.execute({ path: 'a.txt' })).toBe(
+      'contents of a.txt',
+    );
     expect(client.calls).toEqual([['read_file', { path: 'a.txt' }]]);
   });
 });

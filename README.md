@@ -22,6 +22,9 @@ console.log(greet('world')); // "Hello, world!"
 npm test
 ```
 
+## mcp everything
+npx -y @modelcontextprotocol/server-everything streamableHttp
+
 ## License
 
 ISC © Kevin Xie

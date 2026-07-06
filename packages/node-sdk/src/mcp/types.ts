@@ -36,3 +36,24 @@ export interface McpStdioConfig {
   env?: Record<string, string>;
   cwd?: string;
 }
+
+/**
+ * Remote server description — a URL plus optional headers (Authorization,
+ * an API key, a tenant id). No command: the server is already running
+ * somewhere and we connect to it over HTTP.
+ */
+export interface McpHttpConfig {
+  url: string;
+  headers?: Record<string, string>;
+}
+
+/**
+ * One server entry from mcp.json. The presence of `command` vs `url` is the
+ * discriminant — that's the single fact the transport factory branches on.
+ */
+export type McpServerConfig = McpStdioConfig | McpHttpConfig;
+
+/** Narrowing helper: is this a remote (HTTP) server rather than a spawned one? */
+export function isHttpConfig(config: McpServerConfig): config is McpHttpConfig {
+  return 'url' in config;
+}
