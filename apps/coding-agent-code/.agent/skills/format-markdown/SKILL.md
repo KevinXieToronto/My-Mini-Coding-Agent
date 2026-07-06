@@ -17,20 +17,20 @@ Apply these rules to the target `.md` file exactly. Edit the file in place; do n
 
 ## Text style
 
-6. Style of title is `**bold**` and `_italic_`.
+6. The H1 title text must be **both bold and italic**: wrap it as `**_Title_**`. Example: `# My Notes` becomes `# **_My Notes_**`. Bold-only or italic-only is wrong.
 7. Use ATX headings (`#`), never Setext (`===` / `---` underlines).
-7. Use `-` for unordered list bullets (never `*` or `+`), with two-space indentation per nesting level.
-8. Use `1.` for every ordered list item and let Markdown renumber (do not hand-number `1. 2. 3.`).
-9. Emphasis: `**bold**` and `_italic_`. Do not mix `__` or `*` styles.
-10. Wrap inline code, file names, and identifiers in backticks.
-11. Write link text descriptively — never "click here" or a bare URL when text is available.
+9. Use `-` for unordered list bullets (never `*` or `+`), with two-space indentation per nesting level.
+10. Use `1.` for every ordered list item and let Markdown renumber (do not hand-number `1. 2. 3.`).
+11. Emphasis in body text: `**bold**` and `_italic_`. Do not mix `__` or `*` styles.
+12. Wrap inline code, file names, and identifiers in backticks.
+13. Write link text descriptively — never "click here" or a bare URL when text is available.
 
 ## Code and tables
 
-12. Fenced code blocks use triple backticks with a language tag (e.g. ```` ```ts ````). Never indent-based code blocks.
-13. Align table columns with pipes and a header separator row; keep one space of padding inside each cell.
+14. Fenced code blocks use triple backticks with a language tag (e.g. ```` ```ts ````). Never indent-based code blocks.
+15. Align table columns with pipes and a header separator row; keep one space of padding inside each cell.
 
 ## Finish
 
-14. Do not change the meaning of any content — only its formatting and style.
-15. After editing, report a one-line summary of what was normalized (e.g. "Fixed heading levels, converted bullets to `-`, collapsed blank lines").
+16. Do not change the meaning of any content — only its formatting and style.
+17. After editing, report a one-line summary of what was normalized (e.g. "Fixed heading levels, converted bullets to `-`, collapsed blank lines").
