@@ -1,43 +1,29 @@
 import { createInterface } from 'node:readline/promises';
 import type { Interface } from 'node:readline/promises';
 
-import { Agent, AgentConfigSchema } from '@kevin.xie.toronto/agent-core';
-import { createOpenAICompatibleProvider } from '@kevin.xie.toronto/llm-provider-abstraction';
+import {
+  createAgentHarness,
+  loadHarnessOptionsFromEnv,
+} from '@kevin.xie.toronto/coding-agent-sdk';
+import type { AgentHarness } from '@kevin.xie.toronto/coding-agent-sdk';
 import chalk from 'chalk';
 
 /** Read-only tools never need approval. */
 const AUTO_APPROVED = new Set(['read_file', 'list_dir']);
 
-function createAgentFromEnv(readline: Interface): Agent {
-  const apiKey = process.env['AGENT_API_KEY'];
-  if (apiKey === undefined || apiKey === '') {
-    console.error(chalk.red('AGENT_API_KEY is not set.'));
-    console.error('  export AGENT_API_KEY=sk-...            # required');
-    console.error('  export AGENT_BASE_URL=https://api.openai.com/v1   # optional');
-    console.error('  export AGENT_MODEL=gpt-4o-mini                    # optional');
-    console.error('  export AGENT_LOG_DIR=.agent-logs                  # optional, "" to disable');
+function createHarness(readline: Interface): AgentHarness {
+  const loaded = loadHarnessOptionsFromEnv();
+  if (!loaded.ok) {
+    console.error(chalk.red(loaded.error));
     process.exit(1);
   }
-
-  // Each API call's request and response are saved as separate JSON files
-  // here; set AGENT_LOG_DIR="" to turn logging off.
-  const logDir = process.env['AGENT_LOG_DIR'] ?? '.agent-logs';
-
-  const provider = createOpenAICompatibleProvider({
-    apiKey,
-    baseUrl: process.env['AGENT_BASE_URL'] ?? 'https://api.openai.com/v1',
-    model: process.env['AGENT_MODEL'] ?? 'gpt-4o-mini',
-    logDir: logDir === '' ? undefined : logDir,
-  });
-
-  const config = AgentConfigSchema.parse({ name: 'coding-agent' });
 
   // Tools the user answered "a" (always) for — approved for the session.
   const sessionApproved = new Set<string>();
   // Whether the current assistant message has streamed any text yet.
   let streaming = false;
 
-  return new Agent(provider, config, {
+  return createAgentHarness(loaded.options, {
     onTextDelta: (textDelta) => {
       if (!streaming) {
         process.stdout.write('\n');
@@ -63,6 +49,11 @@ function createAgentFromEnv(readline: Interface): Agent {
       const firstLine = result.split('\n')[0] ?? '';
       console.log(chalk.dim(`    ↳ ${firstLine.slice(0, 100)}`));
     },
+    onCompaction: (before, after) => {
+      console.log(
+        chalk.dim(`  ⧉ compacted context: ${before} → ${after} messages`),
+      );
+    },
     canUseTool: async (name, args) => {
       if (AUTO_APPROVED.has(name) || sessionApproved.has(name)) return true;
       const preview = args.length > 200 ? `${args.slice(0, 200)}...` : args;
@@ -86,12 +77,12 @@ export async function startTui(prompt?: string): Promise<void> {
   // The readline interface is created up front and shared: the REPL reads
   // tasks from it, and canUseTool reads approvals from it mid-turn.
   const readline = createInterface({ input: process.stdin, output: process.stdout });
-  const agent = createAgentFromEnv(readline);
+  const harness = createHarness(readline);
 
   try {
     // One-shot mode: `coding-agent "fix the failing test"`
     if (prompt !== undefined) {
-      await agent.run(prompt);
+      await harness.runTask(prompt);
       return;
     }
 
@@ -102,7 +93,7 @@ export async function startTui(prompt?: string): Promise<void> {
       if (line === '') continue;
       if (line === 'exit' || line === 'quit') break;
       try {
-        await agent.run(line);
+        await harness.runTask(line);
       } catch (error) {
         console.error(chalk.red(error instanceof Error ? error.message : String(error)));
       }

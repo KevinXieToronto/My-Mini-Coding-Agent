@@ -7,6 +7,12 @@ import { ToolRegistry } from '#tools/types';
 export * from '#tools/types';
 export * from '#tools/builtin';
 
+const COMPACTION_PROMPT =
+  'You summarize a coding-agent conversation so it can continue in fewer tokens. ' +
+  'Write a compact but complete summary: the original task, key decisions, files ' +
+  'read or changed (with their paths), tool results that still matter, and what ' +
+  'remains to be done.';
+
 export const AgentConfigSchema = z.object({
   name: z.string(),
   systemPrompt: z
@@ -17,6 +23,15 @@ export const AgentConfigSchema = z.object({
       'inspect before you edit, verify after you change. Keep answers concise.',
     ),
   maxTurns: z.number().int().positive().default(24),
+  compaction: z
+    .object({
+      enabled: z.boolean().default(true),
+      /** Rough transcript size (chars of JSON) that triggers compaction. */
+      maxChars: z.number().int().positive().default(120_000),
+      /** How many recent messages survive compaction verbatim. */
+      keepRecent: z.number().int().positive().default(8),
+    })
+    .default({ enabled: true, maxChars: 120_000, keepRecent: 8 }),
 });
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
@@ -34,6 +49,8 @@ export interface AgentEvents {
    * Omit the callback to allow everything (Part 2 behavior).
    */
   canUseTool?(name: string, args: string): Promise<boolean> | boolean;
+  /** Fired after old messages were folded into a summary. */
+  onCompaction?(messagesBefore: number, messagesAfter: number): void;
 }
 
 export class Agent {
@@ -51,6 +68,56 @@ export class Agent {
     }
   }
 
+  /** Read-only view of the transcript — for UIs, tests, and metrics. */
+  get history(): readonly ChatMessage[] {
+    return this.messages;
+  }
+
+  /** Rough size estimate; JSON covers text, tool args and results alike. */
+  private transcriptSize(): number {
+    return JSON.stringify(this.messages).length;
+  }
+
+  private async maybeCompact(): Promise<void> {
+    const { enabled, maxChars, keepRecent } = this.config.compaction;
+    if (!enabled || this.transcriptSize() <= maxChars) return;
+
+    // messages[0] is the system prompt — it never compacts. Keep the last
+    // `keepRecent` messages, but a tool result must never open the kept
+    // tail (its assistant tool-call message would be gone, and the API
+    // rejects orphaned tool results): walk the cut point back until the
+    // tail starts on a non-tool message.
+    let cut = Math.max(1, this.messages.length - keepRecent);
+    while (cut > 1 && this.messages[cut]?.role === 'tool') cut -= 1;
+    const old = this.messages.slice(1, cut);
+    if (old.length === 0) return;
+
+    // Plain chat(), no tools, no streaming: the summary is bookkeeping,
+    // not something the user should watch scroll by.
+    const response = await this.provider.chat({
+      messages: [
+        { role: 'system', content: COMPACTION_PROMPT },
+        {
+          role: 'user',
+          content: `Summarize this transcript:\n\n${JSON.stringify(old, null, 2)}`,
+        },
+      ],
+    });
+    const summary = response.content ?? '(no summary produced)';
+
+    const before = this.messages.length;
+    const kept = this.messages.slice(cut);
+    this.messages.length = 1;
+    this.messages.push({
+      role: 'user',
+      content:
+        `[Context was compacted. Summary of the ${old.length} earlier messages:]\n` +
+        summary,
+    });
+    this.messages.push(...kept);
+    this.events.onCompaction?.(before, this.messages.length);
+  }
+
   /** Run one user prompt to completion (possibly many LLM round-trips). */
   async run(prompt: string): Promise<string> {
     this.messages.push({ role: 'user', content: prompt });
@@ -60,10 +127,14 @@ export class Agent {
         messages: this.messages,
         tools: this.tools.specs(),
       });*/
+
+      await this.maybeCompact(); // 在循环中触发
+
       const request = {
         messages: this.messages,
         tools: this.tools.specs(),
       };
+
       const response =
         this.provider.stream !== undefined
           ? await this.provider.stream(request, (textDelta) => {

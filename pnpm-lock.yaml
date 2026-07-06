@@ -70,12 +70,9 @@ importers:
         specifier: 7.7.4
         version: 7.7.4
     devDependencies:
-      '@kevin.xie.toronto/agent-core':
+      '@kevin.xie.toronto/coding-agent-sdk':
         specifier: workspace:^
-        version: link:../../packages/agent-core
-      '@kevin.xie.toronto/llm-provider-abstraction':
-        specifier: workspace:^
-        version: link:../../packages/llm_provider_abstraction
+        version: link:../../packages/node-sdk
       '@types/semver':
         specifier: ^7.7.0
         version: 7.7.0
@@ -104,6 +101,18 @@ importers:
       undici:
         specifier: 7.27.1
         version: 7.27.1
+      zod:
+        specifier: 'catalog:'
+        version: 4.3.6
+
+  packages/node-sdk:
+    dependencies:
+      '@kevin.xie.toronto/agent-core':
+        specifier: workspace:^
+        version: link:../agent-core
+      '@kevin.xie.toronto/llm-provider-abstraction':
+        specifier: workspace:^
+        version: link:../llm_provider_abstraction
       zod:
         specifier: 'catalog:'
         version: 4.3.6

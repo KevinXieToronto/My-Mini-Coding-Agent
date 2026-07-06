@@ -1,0 +1,28 @@
+{
+  "name": "@kevin.xie.toronto/coding-agent-sdk",
+  "version": "1.0.0",
+  "license": "MIT",
+  "type": "module",
+  "files": ["dist"],
+  "imports": {
+    "#*": ["./src/*.ts", "./src/*/index.ts"]
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@kevin.xie.toronto/agent-core": "workspace:^",
+    "@kevin.xie.toronto/llm-provider-abstraction": "workspace:^",
+    "zod": "catalog:"
+  }
+}

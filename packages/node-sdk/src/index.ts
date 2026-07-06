@@ -1,0 +1,14 @@
+// The hand-picked public surface. Apps import this package and nothing else —
+// never agent-core, never the provider package.
+export { createAgentHarness } from '#harness';
+export type { AgentHarness, AgentHarnessOptions } from '#harness';
+export { loadHarnessOptionsFromEnv } from '#env';
+export type { EnvResult } from '#env';
+
+// Types apps need to talk to the harness, re-exported so the app's
+// package.json never lists the engine packages at all.
+export type { AgentEvents, ToolDefinition } from '@kevin.xie.toronto/agent-core';
+export type {
+  ChatProvider,
+  ChatResponse,
+} from '@kevin.xie.toronto/llm-provider-abstraction';

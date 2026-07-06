@@ -34,8 +34,7 @@
     "semver": "7.7.4"
   },
   "devDependencies": {
-    "@kevin.xie.toronto/agent-core": "workspace:^",
-    "@kevin.xie.toronto/llm-provider-abstraction": "workspace:^",
+    "@kevin.xie.toronto/coding-agent-sdk": "workspace:^",
     "@types/semver": "^7.7.0"
   },
   "optionalDependencies": {

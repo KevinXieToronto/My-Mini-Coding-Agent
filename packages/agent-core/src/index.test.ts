@@ -179,3 +179,73 @@ describe('Agent streaming & permissions', () => {
     expect(executed).toBe(true);
   });
 });
+
+describe('Agent context compaction', () => {
+  it('folds old messages into a summary once the transcript exceeds maxChars', async () => {
+    const config = AgentConfigSchema.parse({
+      name: 'test',
+      compaction: { enabled: true, maxChars: 500, keepRecent: 1 },
+    });
+    const provider = scriptedProvider([
+      // run 1: a long answer that pushes the transcript over the threshold
+      { content: `first answer: ${'x'.repeat(600)}`, toolCalls: [], finishReason: 'stop' },
+      // run 2: the compaction summary call, then the real turn
+      { content: 'THE SUMMARY', toolCalls: [], finishReason: 'stop' },
+      { content: 'second answer', toolCalls: [], finishReason: 'stop' },
+    ]);
+    const compactions: Array<[number, number]> = [];
+    const agent = new Agent(provider, config, {
+      onCompaction: (before, after) => compactions.push([before, after]),
+    });
+
+    await agent.run('question one');
+    expect(await agent.run('question two')).toBe('second answer');
+
+    expect(compactions).toEqual([[4, 3]]);
+    const summary = agent.history.find(
+      (message) => message.role === 'user' && message.content.includes('THE SUMMARY'),
+    );
+    expect(summary).toBeDefined();
+    expect(
+      agent.history.some((message) => message.content?.includes('first answer')),
+    ).toBe(false);
+  });
+
+  it('never lets the kept tail start on a tool result', async () => {
+    const config = AgentConfigSchema.parse({
+      name: 'test',
+      compaction: { enabled: true, maxChars: 400, keepRecent: 3 },
+    });
+    const provider = scriptedProvider([
+      // run 1: one tool call with a large result, then an answer
+      {
+        content: null,
+        toolCalls: [{ id: 'call_1', name: 'big', arguments: '{}' }],
+        finishReason: 'tool_calls',
+      },
+      { content: 'first done', toolCalls: [], finishReason: 'stop' },
+      // run 2: the compaction summary call, then the real answer
+      { content: 'SUMMARY', toolCalls: [], finishReason: 'stop' },
+      { content: 'second done', toolCalls: [], finishReason: 'stop' },
+    ]);
+    const agent = new Agent(provider, config);
+    agent.tools.register({
+      name: 'big',
+      description: 'returns a big payload',
+      schema: z.object({}),
+      execute: async () => 'y'.repeat(600),
+    });
+
+    await agent.run('use the big tool');
+    await agent.run('follow-up');
+
+    // Compaction did happen...
+    expect(agent.history[1]?.content).toContain('SUMMARY');
+    // ...and every tool message still follows an assistant message —
+    // otherwise the next API request would be rejected as malformed.
+    agent.history.forEach((message, index) => {
+      if (message.role !== 'tool') return;
+      expect(agent.history[index - 1]?.role).toBe('assistant');
+    });
+  });
+});
