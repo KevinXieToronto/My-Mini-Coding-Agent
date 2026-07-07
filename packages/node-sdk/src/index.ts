@@ -26,3 +26,7 @@ export type {
 // Skills: progressive-disclosure playbooks discovered from .agent/skills.
 export { discoverSkills, renderSkillsCatalog, createSkillTool } from '#skills/index';
 export type { Skill } from '#skills/index';
+
+// Slash commands: user-invoked prompt templates discovered from .agent/commands.
+export { discoverCommands, substituteArgs, parseCommandLine } from '#commands/index';
+export type { SlashCommand } from '#commands/index';

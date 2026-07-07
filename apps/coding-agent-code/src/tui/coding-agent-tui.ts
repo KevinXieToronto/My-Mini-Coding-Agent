@@ -1,15 +1,19 @@
 import {
   connectMcpServer,
   createAgentHarness,
+  discoverCommands,
   discoverSkills,
   loadHarnessOptionsFromEnv,
   loadMcpConfig,
+  parseCommandLine,
+  substituteArgs,
 } from '@kevin.xie.toronto/coding-agent-sdk';
 import type {
   AgentEvents,
   AgentHarness,
   AgentHarnessOptions,
   McpConnection,
+  SlashCommand,
 } from '@kevin.xie.toronto/coding-agent-sdk';
 import { randomUUID } from 'node:crypto';
 
@@ -63,6 +67,13 @@ interface Approval {
   resolve: (approved: boolean) => void;
 }
 
+/** A command the app runs itself, vs a custom template that expands to a prompt. */
+interface BuiltinCommand {
+  name: string;
+  description: string;
+  run: (args: string) => void;
+}
+
 class CodingAgentTui {
   private readonly screen: Screen;
   private readonly harness: AgentHarness;
@@ -73,6 +84,8 @@ class CodingAgentTui {
   private readonly sessionId = `session_${randomUUID()}`;
   /** The welcome-frame content, pinned as a fixed header (not scrollback). */
   private readonly banner: string[];
+  private readonly commands: Map<string, SlashCommand>;   // custom (from .agent/commands)
+  private readonly builtins: Map<string, BuiltinCommand>; // app-owned (/help, /clear, /exit)
 
   private mcpToolCount = 0;
   private running = false;
@@ -84,10 +97,15 @@ class CodingAgentTui {
   private renderQueued = false;
   private resolveDone: (() => void) | undefined;
 
-  constructor(private readonly options: AgentHarnessOptions) {
+  constructor(
+    private readonly options: AgentHarnessOptions,
+    commands: SlashCommand[] = [],
+  ) {
     this.harness = createAgentHarness(options, this.events());
     this.screen = new Screen(this.handleKey, this.scheduleRender);
     this.banner = this.bannerLines();
+    this.commands = new Map(commands.map((command) => [command.name, command]));
+    this.builtins = this.builtinCommands();
   }
 
   /** Enter the alternate screen, connect MCP, and run until the user quits. */
@@ -106,6 +124,9 @@ class CodingAgentTui {
     this.mcpToolCount = toolCount;
     for (const skill of this.options.skills ?? []) {
       this.transcript.addNotice(`⚙ skill: ${skill.name} — ${skill.description}`);
+    }
+    for (const command of this.commands.values()) {
+      this.transcript.addNotice(`⌘ command: /${command.name} — ${command.description}`);
     }
     this.scheduleRender();
 
@@ -129,6 +150,34 @@ class CodingAgentTui {
       field('Model', model),
       field('Version', VERSION),
     ];
+  }
+
+  /** The app-owned commands. Custom commands (from .agent/commands) expand to a prompt instead. */
+  private builtinCommands(): Map<string, BuiltinCommand> {
+    const list: BuiltinCommand[] = [
+      { name: 'help', description: 'List available commands', run: () => this.showHelp() },
+      { name: 'clear', description: 'Clear the transcript', run: () => this.clearScreen() },
+      { name: 'exit', description: 'Quit the agent', run: () => this.quit() },
+    ];
+    return new Map(list.map((command) => [command.name, command]));
+  }
+
+  /** `/help`: list every command — built-ins and custom together — with its description. */
+  private showHelp(): void {
+    this.transcript.addNotice('Commands:');
+    for (const command of this.builtins.values()) {
+      this.transcript.addNotice(`  /${command.name} — ${command.description}`);
+    }
+    for (const command of this.commands.values()) {
+      this.transcript.addNotice(`  /${command.name} — ${command.description}`);
+    }
+    this.scheduleRender();
+  }
+
+  /** `/clear`: wipe the scrollback. */
+  private clearScreen(): void {
+    this.transcript.clear();
+    this.scheduleRender();
   }
 
   // --- harness events → transcript / spinner ---------------------------------
@@ -243,12 +292,37 @@ class CodingAgentTui {
       this.scheduleRender();
       return;
     }
-    if (text === '/exit' || text === '/quit' || text === 'exit') {
-      this.quit();
+    if (text.startsWith('/')) {
+      this.runCommand(text);
       return;
     }
     this.transcript.addUser(text);
     void this.runTask(text);
+  }
+
+  /** Dispatch a `/…` line: a built-in runs app code; a custom command expands to a prompt. */
+  private runCommand(input: string): void {
+    const { name, args } = parseCommandLine(input);
+
+    const builtin = this.builtins.get(name);
+    if (builtin !== undefined) {
+      builtin.run(args);
+      return;
+    }
+
+    const command = this.commands.get(name);
+    if (command === undefined) {
+      const known = [...this.builtins.keys(), ...this.commands.keys()]
+        .map((each) => `/${each}`)
+        .join(', ');
+      this.transcript.addNotice(`unknown command "/${name}". Try: ${known}`);
+      this.scheduleRender();
+      return;
+    }
+
+    // Show what you typed; send the expanded template to the model.
+    this.transcript.addUser(input);
+    void this.runTask(substituteArgs(command.body, args));
   }
 
   private async runTask(text: string): Promise<void> {
@@ -426,6 +500,7 @@ export async function startTui(prompt?: string): Promise<void> {
     ...loaded.options,
     skills: discoverSkills(),
   };
+  const commands = discoverCommands();
 
   // A full-screen UI only makes sense on a real terminal. One-shot mode
   // (`coding-agent "fix the test"`) and piped stdin fall back to plain output.
@@ -434,9 +509,9 @@ export async function startTui(prompt?: string): Promise<void> {
       console.error(chalk.red('no prompt given and stdin is not a TTY.'));
       process.exit(1);
     }
-    await runOneShot(options, prompt);
+    await runOneShot(options, prompt); // one-shot mode has no commands
     return;
   }
 
-  await new CodingAgentTui(options).start();
+  await new CodingAgentTui(options, commands).start();
 }

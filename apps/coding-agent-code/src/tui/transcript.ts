@@ -51,6 +51,12 @@ export class Transcript {
     this.open = undefined;
   }
 
+  /** Wipe the scrollback — backs the /clear command. */
+  clear(): void {
+    this.blocks = [];
+    this.open = undefined;
+  }
+
   get all(): readonly Block[] {
     return this.blocks;
   }
