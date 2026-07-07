@@ -1,7 +1,7 @@
 import { Agent, AgentConfigSchema } from '@kevin.xie.toronto/agent-core';
 import type { AgentEvents, ToolDefinition } from '@kevin.xie.toronto/agent-core';
 import { createOpenAICompatibleProvider } from '@kevin.xie.toronto/llm-provider-abstraction';
-import type { ChatProvider } from '@kevin.xie.toronto/llm-provider-abstraction';
+import type { ChatMessage, ChatProvider } from '@kevin.xie.toronto/llm-provider-abstraction';
 
 import { createSkillTool, renderSkillsCatalog } from '#skills/index';
 import type { Skill } from '#skills/index';
@@ -21,6 +21,8 @@ export interface AgentHarnessOptions {
    * When set, apiKey/baseUrl/model/logDir are ignored.
    */
   provider?: ChatProvider;
+  /** Prior conversation to seed the agent with (for --resume). */
+  resumeHistory?: ChatMessage[];
 }
 
 export interface AgentHarness {
@@ -28,6 +30,8 @@ export interface AgentHarness {
   runTask(prompt: string, signal?: AbortSignal): Promise<string>;   // ← new: signal
   /** Add a custom tool alongside the builtins. */
   registerTool(tool: ToolDefinition): void;
+  /** The live conversation — snapshot this to persist the session. */
+  readonly history: readonly ChatMessage[];
 }
 
 export function createAgentHarness(
@@ -60,6 +64,9 @@ export function createAgentHarness(
       : { ...base, systemPrompt: `${base.systemPrompt}\n\n${catalog}` };
 
   const agent = new Agent(provider, config, events);
+  if (options.resumeHistory !== undefined) {
+    agent.restore(options.resumeHistory);
+  }
   if (skills.length > 0) {
     agent.tools.register(createSkillTool(skills));
   }
@@ -67,5 +74,8 @@ export function createAgentHarness(
   return {
     runTask: (prompt, signal) => agent.run(prompt, signal),          // ← new: forward signal
     registerTool: (tool) => agent.tools.register(tool),
+    get history() {
+      return agent.history;
+    },
   };
 }

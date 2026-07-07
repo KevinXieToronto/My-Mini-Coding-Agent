@@ -1,5 +1,7 @@
 import chalk from 'chalk';
 
+import type { ChatMessage } from '@kevin.xie.toronto/coding-agent-sdk';
+
 export type Block =
   | { kind: 'user'; text: string }
   | { kind: 'assistant'; text: string }
@@ -54,6 +56,12 @@ export class Transcript {
   /** Wipe the scrollback — backs the /clear command. */
   clear(): void {
     this.blocks = [];
+    this.open = undefined;
+  }
+
+  /** Replace the scrollback wholesale — backs session resume. */
+  load(blocks: Block[]): void {
+    this.blocks = blocks;
     this.open = undefined;
   }
 
@@ -148,4 +156,50 @@ export function renderTranscript(blocks: readonly Block[], width: number): strin
     lines.push(''); // one blank line between blocks
   }
   return lines;
+}
+
+/**
+ * Rebuild display blocks from an engine transcript. The engine's ChatMessage[]
+ * is the source of truth; the on-screen blocks are a projection of it. A tool
+ * call and its result live in *two* messages (assistant.toolCalls, then a
+ * `tool` message) but render as *one* block — we pair them by tool-call id.
+ */
+export function transcriptFromHistory(messages: readonly ChatMessage[]): Block[] {
+  const blocks: Block[] = [];
+  const byId = new Map<string, Extract<Block, { kind: 'tool' }>>();
+
+  for (const message of messages) {
+    switch (message.role) {
+      case 'system':
+        break; // never shown
+      case 'user':
+        blocks.push({ kind: 'user', text: message.content });
+        break;
+      case 'assistant': {
+        if (message.content !== null && message.content !== '') {
+          blocks.push({ kind: 'assistant', text: message.content });
+        }
+        for (const call of message.toolCalls ?? []) {
+          const tool: Extract<Block, { kind: 'tool' }> = {
+            kind: 'tool',
+            name: call.name,
+            args: call.arguments,
+            status: 'running',
+          };
+          blocks.push(tool);
+          byId.set(call.id, tool); // await its result below
+        }
+        break;
+      }
+      case 'tool': {
+        const tool = byId.get(message.toolCallId);
+        if (tool !== undefined) {
+          tool.status = 'done';
+          tool.result = message.content;
+        }
+        break;
+      }
+    }
+  }
+  return blocks;
 }

@@ -3,9 +3,13 @@ import {
   createAgentHarness,
   discoverCommands,
   discoverSkills,
+  latestSession,
+  listSessions,
   loadHarnessOptionsFromEnv,
   loadMcpConfig,
+  loadSession,
   parseCommandLine,
+  saveSession,
   substituteArgs,
 } from '@kevin.xie.toronto/coding-agent-sdk';
 import type {
@@ -14,15 +18,17 @@ import type {
   AgentHarnessOptions,
   McpConnection,
   SlashCommand,
+  StoredSession,
 } from '@kevin.xie.toronto/coding-agent-sdk';
 import { randomUUID } from 'node:crypto';
 
 import chalk from 'chalk';
 
+import type { ShellOptions } from '#cli/run-shell';
 import { Editor } from '#tui/editor';
 import { Screen } from '#tui/screen';
 import type { Key } from '#tui/screen';
-import { Transcript, renderFrame, renderTranscript } from '#tui/transcript';
+import { Transcript, renderFrame, renderTranscript, transcriptFromHistory } from '#tui/transcript';
 import { VERSION } from '#version';
 
 /** Read-only tools never need approval. */
@@ -81,7 +87,9 @@ class CodingAgentTui {
   private readonly editor = new Editor();
   private readonly sessionApproved = new Set<string>();
   private readonly mcpConnections: McpConnection[] = [];
-  private readonly sessionId = `session_${randomUUID()}`;
+  private readonly sessionId: string;
+  private readonly createdAt: string;
+  private readonly resume: StoredSession | undefined;
   /** The welcome-frame content, pinned as a fixed header (not scrollback). */
   private readonly banner: string[];
   private readonly commands: Map<string, SlashCommand>;   // custom (from .agent/commands)
@@ -100,9 +108,13 @@ class CodingAgentTui {
   constructor(
     private readonly options: AgentHarnessOptions,
     commands: SlashCommand[] = [],
+    resume?: StoredSession,
   ) {
     this.harness = createAgentHarness(options, this.events());
     this.screen = new Screen(this.handleKey, this.scheduleRender);
+    this.resume = resume;
+    this.sessionId = resume?.id ?? `session_${randomUUID()}`;
+    this.createdAt = resume?.createdAt ?? new Date().toISOString();
     this.banner = this.bannerLines();
     this.commands = new Map(commands.map((command) => [command.name, command]));
     this.builtins = this.builtinCommands();
@@ -127,6 +139,10 @@ class CodingAgentTui {
     }
     for (const command of this.commands.values()) {
       this.transcript.addNotice(`⌘ command: /${command.name} — ${command.description}`);
+    }
+    if (this.resume !== undefined) {
+      this.transcript.load(transcriptFromHistory(this.resume.history));
+      this.transcript.addNotice(`↺ resumed session ${this.sessionId}`);
     }
     this.scheduleRender();
 
@@ -178,6 +194,18 @@ class CodingAgentTui {
   private clearScreen(): void {
     this.transcript.clear();
     this.scheduleRender();
+  }
+
+  /** Snapshot the conversation to disk. Skips an empty session (system only). */
+  private persist(): void {
+    if (this.harness.history.length <= 1) return;
+    saveSession({
+      id: this.sessionId,
+      createdAt: this.createdAt,
+      updatedAt: new Date().toISOString(),
+      cwd: process.cwd(),
+      history: [...this.harness.history],
+    });
   }
 
   // --- harness events → transcript / spinner ---------------------------------
@@ -341,6 +369,7 @@ class CodingAgentTui {
       this.running = false;
       this.controller = undefined;
       this.stopSpinner();
+      this.persist();
       this.scheduleRender();
     }
   }
@@ -367,6 +396,7 @@ class CodingAgentTui {
   }
 
   private quit(): void {
+    this.persist();
     this.stopSpinner();
     this.screen.close();
     void Promise.allSettled(this.mcpConnections.map((c) => c.close())).then(() => {
@@ -446,7 +476,11 @@ function isPrintable(key: Key): boolean {
 }
 
 /** One-shot / non-interactive mode: stream to stdout, no full-screen UI. */
-async function runOneShot(options: AgentHarnessOptions, prompt: string): Promise<void> {
+async function runOneShot(
+  options: AgentHarnessOptions,
+  prompt: string,
+  resume?: StoredSession,
+): Promise<void> {
   let streaming = false;
   const harness = createAgentHarness(options, {
     onTextDelta: (delta) => {
@@ -482,23 +516,59 @@ async function runOneShot(options: AgentHarnessOptions, prompt: string): Promise
   for (const skill of options.skills ?? []) {
     console.log(chalk.dim(`  ⚙ skill: ${skill.name}`));
   }
+  const sessionId = resume?.id ?? `session_${randomUUID()}`;
+  const createdAt = resume?.createdAt ?? new Date().toISOString();
   try {
     await harness.runTask(prompt);
   } finally {
+    if (harness.history.length > 1) {
+      saveSession({
+        id: sessionId,
+        createdAt,
+        updatedAt: new Date().toISOString(),
+        cwd: process.cwd(),
+        history: [...harness.history],
+      });
+      console.log(chalk.dim(`\nTo resume this session: coding-agent -r ${sessionId}`));
+    }
     await Promise.allSettled(connections.map((c) => c.close()));
   }
 }
 
-export async function startTui(prompt?: string): Promise<void> {
+export async function startTui(prompt?: string, opts: ShellOptions = {}): Promise<void> {
+  // --list: print saved sessions and exit, before touching the API key.
+  if (opts.list === true) {
+    for (const session of listSessions()) {
+      const firstPrompt =
+        session.history.find((message) => message.role === 'user')?.content ?? '';
+      const title = firstPrompt.split('\n')[0]?.slice(0, 60) ?? '';
+      console.log(`${session.id}  ${session.updatedAt}  ${session.cwd}\n    ${title}`);
+    }
+    return;
+  }
+
   const loaded = loadHarnessOptionsFromEnv();
   if (!loaded.ok) {
     console.error(chalk.red(loaded.error));
     process.exit(1);
   }
 
+  // Which session to resume? -r <id> loads that one; bare -r takes the newest
+  // overall; -c takes the newest for this directory; otherwise none.
+  let resume: StoredSession | undefined;
+  if (typeof opts.resume === 'string') {
+    resume = loadSession(opts.resume);
+    if (resume === undefined) console.error(chalk.red(`no session "${opts.resume}"`));
+  } else if (opts.resume === true) {
+    resume = listSessions()[0];
+  } else if (opts.continue === true) {
+    resume = latestSession(process.cwd());
+  }
+
   const options: AgentHarnessOptions = {
     ...loaded.options,
     skills: discoverSkills(),
+    ...(resume !== undefined && { resumeHistory: resume.history }),
   };
   const commands = discoverCommands();
 
@@ -509,9 +579,9 @@ export async function startTui(prompt?: string): Promise<void> {
       console.error(chalk.red('no prompt given and stdin is not a TTY.'));
       process.exit(1);
     }
-    await runOneShot(options, prompt); // one-shot mode has no commands
+    await runOneShot(options, prompt, resume);
     return;
   }
 
-  await new CodingAgentTui(options, commands).start();
+  await new CodingAgentTui(options, commands, resume).start();
 }

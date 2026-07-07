@@ -97,6 +97,22 @@ describe('Agent', () => {
     const agent = new Agent(provider, shortConfig);
     expect(await agent.run('loop')).toContain('max turns');
   });
+
+  it('restore keeps the fresh system prompt and appends non-system messages', () => {
+    // scriptedProvider([]) is the helper this file already defines; restore
+    // never calls the provider, so an empty script is fine.
+    const agent = new Agent(scriptedProvider([]), config);
+    agent.restore([
+      { role: 'system', content: 'STALE system prompt' }, // must be dropped
+      { role: 'user', content: 'earlier question' },
+      { role: 'assistant', content: 'earlier answer' },
+    ]);
+
+    const roles = agent.history.map((m) => m.role);
+    expect(roles).toEqual(['system', 'user', 'assistant']);
+    expect(agent.history[0]?.content).not.toBe('STALE system prompt'); // fresh one wins
+    expect(agent.history[1]?.content).toBe('earlier question');
+  });
 });
 
 describe('Agent streaming & permissions', () => {

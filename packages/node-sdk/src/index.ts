@@ -30,3 +30,8 @@ export type { Skill } from '#skills/index';
 // Slash commands: user-invoked prompt templates discovered from .agent/commands.
 export { discoverCommands, substituteArgs, parseCommandLine } from '#commands/index';
 export type { SlashCommand } from '#commands/index';
+
+// Sessions: snapshot the conversation to disk, resume it later.
+export { saveSession, loadSession, listSessions, latestSession } from '#session/index';
+export type { StoredSession } from '#session/index';
+export type { ChatMessage } from '@kevin.xie.toronto/llm-provider-abstraction';

@@ -81,6 +81,18 @@ export class Agent {
     return this.messages;
   }
 
+  /**
+   * Seed a fresh agent with a prior conversation (for --resume). Keeps the
+   * system prompt this instance was just built with at messages[0], and drops
+   * any saved system message — so a changed prompt, an updated skills catalog,
+   * or newly connected MCP tools all take effect on resume rather than being
+   * frozen at whatever was in force when the session was first saved.
+   */
+  restore(prior: readonly ChatMessage[]): void {
+    this.messages.length = 1;                    // keep messages[0] = system
+    this.messages.push(...prior.filter((message) => message.role !== 'system'));
+  }
+
   /** Rough size estimate; JSON covers text, tool args and results alike. */
   private transcriptSize(): number {
     return JSON.stringify(this.messages).length;
