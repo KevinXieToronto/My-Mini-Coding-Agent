@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { Transcript, renderFrame, wrap } from '#tui/transcript';
+import { Transcript, renderFrame, transcriptFromHistory, wrap } from '#tui/transcript';
 
 describe('Transcript', () => {
   it('streams deltas into one assistant block until it ends', () => {
@@ -57,5 +57,20 @@ describe('renderFrame', () => {
     const out = renderFrame(['a'.repeat(50)], width).map(plain);
     for (const line of out) expect(line.length).toBeLessThanOrEqual(width);
     expect(out[1]).toContain('…');
+  });
+});
+
+describe('transcriptFromHistory', () => {
+  it('renders !shell context messages as $-command notices on resume', () => {
+    const blocks = transcriptFromHistory([
+      { role: 'system', content: 'sys' },
+      { role: 'user', content: '<bash-input>\ngit status\n</bash-input>' },
+      { role: 'user', content: '<bash-stdout>clean</bash-stdout><bash-stderr></bash-stderr>' },
+    ]);
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toMatchObject({ kind: 'notice' });
+    // chalk may add colour codes; assert on the substring.
+    expect((blocks[0] as { text: string }).text).toContain('$ git status');
+    expect((blocks[1] as { text: string }).text).toContain('clean');
   });
 });

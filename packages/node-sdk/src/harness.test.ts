@@ -57,4 +57,26 @@ describe('createAgentHarness', () => {
     });
     expect(await harness.runTask('ping please')).toBe('pong received');
   });
+
+  it('folds project memory into the system prompt', () => {
+    const provider: ChatProvider = {
+      chat: async () => ({ content: 'ok', toolCalls: [], finishReason: 'stop' }),
+    };
+    const harness = createAgentHarness({ apiKey: 'unused', provider, memory: 'REMEMBER-THIS-RULE' });
+    const system = harness.history[0];
+    expect(system?.role).toBe('system');
+    expect(system?.content).toContain('# Project information');
+    expect(system?.content).toContain('REMEMBER-THIS-RULE');
+  });
+
+  it('appendContext adds a user message without running a turn', () => {
+    const provider: ChatProvider = {
+      chat: async () => ({ content: 'ok', toolCalls: [], finishReason: 'stop' }),
+    };
+    const harness = createAgentHarness({ apiKey: 'unused', provider });
+    harness.appendContext('<bash-input>\nls\n</bash-input>');
+    const roles = harness.history.map((message) => message.role);
+    expect(roles).toEqual(['system', 'user']); // system preserved, one appended
+    expect(harness.history[1]?.content).toContain('ls');
+  });
 });

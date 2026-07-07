@@ -172,9 +172,15 @@ export function transcriptFromHistory(messages: readonly ChatMessage[]): Block[]
     switch (message.role) {
       case 'system':
         break; // never shown
-      case 'user':
+      case 'user': {
+        const shell = renderShellMessage(message.content);
+        if (shell !== undefined) {
+          blocks.push(shell);
+          break;
+        }
         blocks.push({ kind: 'user', text: message.content });
         break;
+      }
       case 'assistant': {
         if (message.content !== null && message.content !== '') {
           blocks.push({ kind: 'assistant', text: message.content });
@@ -202,4 +208,26 @@ export function transcriptFromHistory(messages: readonly ChatMessage[]): Block[]
     }
   }
   return blocks;
+}
+
+/** Recognize a `!shell` context message and render it the way it showed live. */
+function renderShellMessage(content: string): Block | undefined {
+  const input = content.match(/^<bash-input>\n?([\s\S]*?)\n?<\/bash-input>$/);
+  if (input !== null) {
+    return { kind: 'notice', text: chalk.cyan(`$ ${unescapeXml(input[1] ?? '')}`) };
+  }
+  const output = content.match(
+    /^<bash-stdout>([\s\S]*?)<\/bash-stdout><bash-stderr>([\s\S]*?)<\/bash-stderr>$/,
+  );
+  if (output !== null) {
+    const stdout = unescapeXml(output[1] ?? '').trimEnd();
+    const stderr = unescapeXml(output[2] ?? '').trimEnd();
+    const body = [stdout, stderr].filter((part) => part !== '').join('\n');
+    return { kind: 'notice', text: chalk.dim(body === '' ? '(no output)' : body) };
+  }
+  return undefined;
+}
+
+function unescapeXml(text: string): string {
+  return text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 }

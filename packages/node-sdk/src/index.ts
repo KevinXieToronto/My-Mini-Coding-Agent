@@ -27,6 +27,14 @@ export type {
 export { discoverSkills, renderSkillsCatalog, createSkillTool } from '#skills/index';
 export type { Skill } from '#skills/index';
 
+// Project memory: AGENTS.md files merged into the system prompt at startup.
+export { discoverMemory } from '#memory/index';
+export type { Memory } from '#memory/index';
+
+// @file mentions: inline a named file's contents into the prompt.
+export { expandMentions } from '#mentions/index';
+export type { MentionExpansion } from '#mentions/index';
+
 // Slash commands: user-invoked prompt templates discovered from .agent/commands.
 export { discoverCommands, substituteArgs, parseCommandLine } from '#commands/index';
 export type { SlashCommand } from '#commands/index';

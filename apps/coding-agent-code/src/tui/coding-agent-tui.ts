@@ -2,7 +2,9 @@ import {
   connectMcpServer,
   createAgentHarness,
   discoverCommands,
+  discoverMemory,
   discoverSkills,
+  expandMentions,
   latestSession,
   listSessions,
   loadHarnessOptionsFromEnv,
@@ -21,6 +23,7 @@ import type {
   StoredSession,
 } from '@kevin.xie.toronto/coding-agent-sdk';
 import { randomUUID } from 'node:crypto';
+import { relative } from 'node:path';
 
 import chalk from 'chalk';
 
@@ -28,6 +31,12 @@ import type { ShellOptions } from '#cli/run-shell';
 import { Editor } from '#tui/editor';
 import { Screen } from '#tui/screen';
 import type { Key } from '#tui/screen';
+import {
+  bashInputTag,
+  bashOutputTag,
+  formatBashOutputForDisplay,
+  runBangCommand,
+} from '#tui/shell';
 import { Transcript, renderFrame, renderTranscript, transcriptFromHistory } from '#tui/transcript';
 import { VERSION } from '#version';
 
@@ -94,6 +103,7 @@ class CodingAgentTui {
   private readonly banner: string[];
   private readonly commands: Map<string, SlashCommand>;   // custom (from .agent/commands)
   private readonly builtins: Map<string, BuiltinCommand>; // app-owned (/help, /clear, /exit)
+  private readonly memorySources: string[];               // AGENTS.md files folded into the prompt
 
   private mcpToolCount = 0;
   private running = false;
@@ -109,6 +119,7 @@ class CodingAgentTui {
     private readonly options: AgentHarnessOptions,
     commands: SlashCommand[] = [],
     resume?: StoredSession,
+    memorySources: string[] = [],
   ) {
     this.harness = createAgentHarness(options, this.events());
     this.screen = new Screen(this.handleKey, this.scheduleRender);
@@ -118,6 +129,7 @@ class CodingAgentTui {
     this.banner = this.bannerLines();
     this.commands = new Map(commands.map((command) => [command.name, command]));
     this.builtins = this.builtinCommands();
+    this.memorySources = memorySources;
   }
 
   /** Enter the alternate screen, connect MCP, and run until the user quits. */
@@ -139,6 +151,9 @@ class CodingAgentTui {
     }
     for (const command of this.commands.values()) {
       this.transcript.addNotice(`⌘ command: /${command.name} — ${command.description}`);
+    }
+    for (const source of this.memorySources) {
+      this.transcript.addNotice(`▣ memory: ${relative(process.cwd(), source)}`);
     }
     if (this.resume !== undefined) {
       this.transcript.load(transcriptFromHistory(this.resume.history));
@@ -324,8 +339,17 @@ class CodingAgentTui {
       this.runCommand(text);
       return;
     }
+    if (text.startsWith('!')) {
+      this.runBang(text.slice(1).trim());
+      return;
+    }
+    // @file mentions: show what you typed; send the model the expanded prompt.
+    const { prompt, files } = expandMentions(text);
     this.transcript.addUser(text);
-    void this.runTask(text);
+    for (const file of files) {
+      this.transcript.addNotice(chalk.dim(`⧉ attached ${file}`));
+    }
+    void this.runTask(prompt);
   }
 
   /** Dispatch a `/…` line: a built-in runs app code; a custom command expands to a prompt. */
@@ -351,6 +375,25 @@ class CodingAgentTui {
     // Show what you typed; send the expanded template to the model.
     this.transcript.addUser(input);
     void this.runTask(substituteArgs(command.body, args));
+  }
+
+  /** Run a `!` command now; leave the exchange in context for the next turn. */
+  private runBang(command: string): void {
+    if (command === '') {
+      this.scheduleRender();
+      return;
+    }
+    this.transcript.addNotice(chalk.cyan(`$ ${command}`));
+    const { stdout, stderr, isError } = runBangCommand(command);
+    this.transcript.addNotice(formatBashOutputForDisplay(stdout, stderr, isError));
+
+    // The model never ran this — but next turn it should see it. Two user
+    // messages, tagged as upstream tags them, appended via harness.appendContext
+    // (which rides Part 10's restore). Then persist so a resumed session has it.
+    this.harness.appendContext(bashInputTag(command));
+    this.harness.appendContext(bashOutputTag(stdout, stderr));
+    this.persist();
+    this.scheduleRender();
   }
 
   private async runTask(text: string): Promise<void> {
@@ -518,8 +561,9 @@ async function runOneShot(
   }
   const sessionId = resume?.id ?? `session_${randomUUID()}`;
   const createdAt = resume?.createdAt ?? new Date().toISOString();
+  const { prompt: expanded } = expandMentions(prompt);
   try {
-    await harness.runTask(prompt);
+    await harness.runTask(expanded);
   } finally {
     if (harness.history.length > 1) {
       saveSession({
@@ -565,9 +609,11 @@ export async function startTui(prompt?: string, opts: ShellOptions = {}): Promis
     resume = latestSession(process.cwd());
   }
 
+  const memory = discoverMemory();
   const options: AgentHarnessOptions = {
     ...loaded.options,
     skills: discoverSkills(),
+    ...(memory.text !== '' && { memory: memory.text }),
     ...(resume !== undefined && { resumeHistory: resume.history }),
   };
   const commands = discoverCommands();
@@ -583,5 +629,5 @@ export async function startTui(prompt?: string, opts: ShellOptions = {}): Promis
     return;
   }
 
-  await new CodingAgentTui(options, commands, resume).start();
+  await new CodingAgentTui(options, commands, resume, memory.sources).start();
 }
