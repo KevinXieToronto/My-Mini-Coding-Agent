@@ -1,5 +1,11 @@
 # @kevin.xie.toronto/coding-agent-code
 
+## 2.0.1
+
+### Patch Changes
+
+- d024eba: Initial publish
+
 ## 2.0.0
 
 ### Major Changes
