@@ -43,3 +43,7 @@ export type { SlashCommand } from '#commands/index';
 export { saveSession, loadSession, listSessions, latestSession } from '#session/index';
 export type { StoredSession } from '#session/index';
 export type { ChatMessage } from '@kevin.xie.toronto/llm-provider-abstraction';
+
+// Usage & cost: accumulate token tallies and price them (policy lives here).
+export { addUsage, emptyUsage, costOf, formatTokens, MODEL_PRICING } from '#usage/index';
+export type { TokenUsage } from '@kevin.xie.toronto/llm-provider-abstraction';

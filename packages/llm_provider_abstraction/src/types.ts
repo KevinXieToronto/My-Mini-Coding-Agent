@@ -28,6 +28,17 @@ export interface ChatRequest {
   temperature?: number;
 }
 
+/**
+ * Token counts for one model call. We keep the two the wire always reports;
+ * total is derived. (The real Kimi Code splits input further into cache-read
+ * and cache-creation buckets so it can price a cached prompt differently — a
+ * refinement you'd add the day your provider bills cache hits at a discount.)
+ */
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface ChatResponse {
   /** Assistant text, if any. */
   content: string | null;
@@ -35,6 +46,8 @@ export interface ChatResponse {
   toolCalls: ToolCall[];
   /** Why generation stopped: 'stop' | 'tool_calls' | 'length' | ... */
   finishReason: string;
+  /** Token usage for this call, when the provider reported it. */
+  usage?: TokenUsage;
 }
 
 /** Called once per streamed fragment of assistant text. */

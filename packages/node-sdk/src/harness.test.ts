@@ -1,4 +1,4 @@
-import type { ChatProvider } from '@kevin.xie.toronto/llm-provider-abstraction';
+import type { ChatProvider, TokenUsage } from '@kevin.xie.toronto/llm-provider-abstraction';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -78,5 +78,30 @@ describe('createAgentHarness', () => {
     const roles = harness.history.map((message) => message.role);
     expect(roles).toEqual(['system', 'user']); // system preserved, one appended
     expect(harness.history[1]?.content).toContain('ls');
+  });
+
+  it('forwards provider usage through onUsage', async () => {
+    const provider: ChatProvider = {
+      chat: async () => ({
+        content: 'ok',
+        toolCalls: [],
+        finishReason: 'stop',
+        usage: { inputTokens: 3, outputTokens: 4 },
+      }),
+    };
+    let seen: TokenUsage | undefined;
+    const harness = createAgentHarness({ apiKey: 'unused', provider }, { onUsage: (u) => (seen = u) });
+    await harness.runTask('hi');
+    expect(seen).toEqual({ inputTokens: 3, outputTokens: 4 });
+  });
+
+  it('setModel changes the model in force', () => {
+    const provider: ChatProvider = {
+      chat: async () => ({ content: 'ok', toolCalls: [], finishReason: 'stop' }),
+    };
+    const harness = createAgentHarness({ apiKey: 'unused', provider, model: 'gpt-4o-mini' });
+    expect(harness.model).toBe('gpt-4o-mini');
+    harness.setModel('gpt-4o');
+    expect(harness.model).toBe('gpt-4o');
   });
 });

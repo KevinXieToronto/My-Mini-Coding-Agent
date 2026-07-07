@@ -1,7 +1,11 @@
 import { Agent, AgentConfigSchema } from '@kevin.xie.toronto/agent-core';
 import type { AgentEvents, ToolDefinition } from '@kevin.xie.toronto/agent-core';
 import { createOpenAICompatibleProvider } from '@kevin.xie.toronto/llm-provider-abstraction';
-import type { ChatMessage, ChatProvider } from '@kevin.xie.toronto/llm-provider-abstraction';
+import type {
+  ChatMessage,
+  ChatProvider,
+  OpenAICompatibleOptions,
+} from '@kevin.xie.toronto/llm-provider-abstraction';
 
 import { createSkillTool, renderSkillsCatalog } from '#skills/index';
 import type { Skill } from '#skills/index';
@@ -34,6 +38,10 @@ export interface AgentHarness {
   registerTool(tool: ToolDefinition): void;
   /** Append a user-role context message *without* running a turn (backs !shell). */
   appendContext(text: string): void;
+  /** Switch the model used for subsequent turns (backs /model). */
+  setModel(model: string): void;
+  /** The model in force right now (for the status line). */
+  readonly model: string;
   /** The live conversation — snapshot this to persist the session. */
   readonly history: readonly ChatMessage[];
 }
@@ -42,14 +50,15 @@ export function createAgentHarness(
   options: AgentHarnessOptions,
   events: AgentEvents = {},
 ): AgentHarness {
-  const provider =
-    options.provider ??
-    createOpenAICompatibleProvider({
-      apiKey: options.apiKey,
-      baseUrl: options.baseUrl ?? 'https://api.openai.com/v1',
-      model: options.model ?? 'gpt-4o-mini',
-      ...(options.logDir !== undefined && { logDir: options.logDir }),
-    });
+  // Retained so setModel can mutate `.model`; the provider reads it per request.
+  const providerOptions: OpenAICompatibleOptions = {
+    apiKey: options.apiKey,
+    baseUrl: options.baseUrl ?? 'https://api.openai.com/v1',
+    model: options.model ?? 'gpt-4o-mini',
+    ...(options.logDir !== undefined && { logDir: options.logDir }),
+  };
+  const provider = options.provider ?? createOpenAICompatibleProvider(providerOptions);
+  let currentModel = providerOptions.model;
 
   // Parse once so the schema's DEFAULT system prompt is applied before we
   // append the catalog — appending to `options.systemPrompt` (often undefined)
@@ -87,6 +96,13 @@ export function createAgentHarness(
     appendContext: (text) => {
       const priorNonSystem = agent.history.filter((message) => message.role !== 'system');
       agent.restore([...priorNonSystem, { role: 'user', content: text }]);
+    },
+    setModel: (model) => {
+      providerOptions.model = model; // the provider reads options.model each call
+      currentModel = model;
+    },
+    get model() {
+      return currentModel;
     },
     get history() {
       return agent.history;

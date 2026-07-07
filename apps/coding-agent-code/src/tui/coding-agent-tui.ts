@@ -1,15 +1,20 @@
 import {
+  addUsage,
   connectMcpServer,
+  costOf,
   createAgentHarness,
   discoverCommands,
   discoverMemory,
   discoverSkills,
+  emptyUsage,
   expandMentions,
+  formatTokens,
   latestSession,
   listSessions,
   loadHarnessOptionsFromEnv,
   loadMcpConfig,
   loadSession,
+  MODEL_PRICING,
   parseCommandLine,
   saveSession,
   substituteArgs,
@@ -21,6 +26,7 @@ import type {
   McpConnection,
   SlashCommand,
   StoredSession,
+  TokenUsage,
 } from '@kevin.xie.toronto/coding-agent-sdk';
 import { randomUUID } from 'node:crypto';
 import { relative } from 'node:path';
@@ -106,6 +112,8 @@ class CodingAgentTui {
   private readonly memorySources: string[];               // AGENTS.md files folded into the prompt
 
   private mcpToolCount = 0;
+  private usage: TokenUsage = emptyUsage();
+  private costUsd = 0;
   private running = false;
   private controller: AbortController | undefined;
   private approval: Approval | undefined;
@@ -166,7 +174,7 @@ class CodingAgentTui {
 
   /** The welcome-frame content: geometric logo, greeting, and session context. */
   private bannerLines(): string[] {
-    const model = this.options.model ?? 'gpt-4o-mini';
+    const model = this.harness.model;
     const field = (label: string, value: string): string =>
       `${`${label}:`.padEnd(10)} ${value}`;
     // Logo art (right-aligned triangle) padded to a fixed cell so the text
@@ -188,6 +196,8 @@ class CodingAgentTui {
     const list: BuiltinCommand[] = [
       { name: 'help', description: 'List available commands', run: () => this.showHelp() },
       { name: 'clear', description: 'Clear the transcript', run: () => this.clearScreen() },
+      { name: 'model', description: 'Show or switch the model', run: (args) => this.switchModel(args) },
+      { name: 'cost', description: 'Show token usage and cost', run: () => this.showCost() },
       { name: 'exit', description: 'Quit the agent', run: () => this.quit() },
     ];
     return new Map(list.map((command) => [command.name, command]));
@@ -202,6 +212,35 @@ class CodingAgentTui {
     for (const command of this.commands.values()) {
       this.transcript.addNotice(`  /${command.name} — ${command.description}`);
     }
+    this.scheduleRender();
+  }
+
+  /** `/model` with no arg lists known models; `/model <id>` switches. */
+  private switchModel(args: string): void {
+    const model = args.trim();
+    if (model === '') {
+      this.transcript.addNotice(`model: ${this.harness.model}`);
+      this.transcript.addNotice(`known: ${Object.keys(MODEL_PRICING).join(', ')}`);
+      this.scheduleRender();
+      return;
+    }
+    this.harness.setModel(model);
+    const priced = MODEL_PRICING[model] !== undefined;
+    this.transcript.addNotice(
+      priced
+        ? `switched to ${model}`
+        : `switched to ${model} (no price entry — its tokens won't add to $)`,
+    );
+    this.scheduleRender();
+  }
+
+  /** `/cost`: the running tally and dollar estimate for this session. */
+  private showCost(): void {
+    const { inputTokens, outputTokens } = this.usage;
+    this.transcript.addNotice(
+      `usage: ${formatTokens(inputTokens)} in + ${formatTokens(outputTokens)} out ` +
+        `= ${formatTokens(inputTokens + outputTokens)} tokens · $${this.costUsd.toFixed(4)}`,
+    );
     this.scheduleRender();
   }
 
@@ -245,6 +284,11 @@ class CodingAgentTui {
       },
       onCompaction: (before, after) => {
         this.transcript.addNotice(`⧉ compacted context: ${before} → ${after} messages`);
+        this.scheduleRender();
+      },
+      onUsage: (usage) => {
+        this.usage = addUsage(this.usage, usage);
+        this.costUsd += costOf(this.harness.model, usage);
         this.scheduleRender();
       },
       canUseTool: (name, args) => this.requestApproval(name, args),
@@ -499,9 +543,11 @@ class CodingAgentTui {
     const state = this.running
       ? `${chalk.yellow(SPINNER[this.spinnerFrame] ?? '')} working…`
       : chalk.green('ready');
-    const model = this.options.model ?? 'gpt-4o-mini';
+    const model = this.harness.model;
+    const total = this.usage.inputTokens + this.usage.outputTokens;
+    const meter = total > 0 ? ` · ${formatTokens(total)} tok · $${this.costUsd.toFixed(4)}` : '';
     const mcp = this.mcpToolCount > 0 ? ` · ${this.mcpToolCount} mcp tools` : '';
-    const line = `${state} · ${model}${mcp} · Ctrl-C to cancel`;
+    const line = `${state} · ${model}${meter}${mcp} · Ctrl-C to cancel`;
     return chalk.dim(line.slice(0, width));
   }
 
@@ -525,6 +571,9 @@ async function runOneShot(
   resume?: StoredSession,
 ): Promise<void> {
   let streaming = false;
+  let usage = emptyUsage();
+  let costUsd = 0;
+  const model = options.model ?? 'gpt-4o-mini';
   const harness = createAgentHarness(options, {
     onTextDelta: (delta) => {
       if (!streaming) {
@@ -548,6 +597,10 @@ async function runOneShot(
     },
     onCompaction: (before, after) => {
       console.log(chalk.dim(`  ⧉ compacted context: ${before} → ${after} messages`));
+    },
+    onUsage: (u) => {
+      usage = addUsage(usage, u);
+      costUsd += costOf(model, u);
     },
     // Non-interactive: no one to ask. Trust the prompt. A real CLI would gate
     // this behind an explicit --yes / --dangerously-skip-permissions flag.
@@ -574,6 +627,10 @@ async function runOneShot(
         history: [...harness.history],
       });
       console.log(chalk.dim(`\nTo resume this session: coding-agent -r ${sessionId}`));
+    }
+    const total = usage.inputTokens + usage.outputTokens;
+    if (total > 0) {
+      console.log(chalk.dim(`\nusage: ${formatTokens(total)} tokens · $${costUsd.toFixed(4)}`));
     }
     await Promise.allSettled(connections.map((c) => c.close()));
   }

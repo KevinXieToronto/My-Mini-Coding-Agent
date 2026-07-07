@@ -9,6 +9,7 @@ import type {
   ChatRequest,
   ChatResponse,
   ToolCall,
+  TokenUsage,
   StreamDeltaHandler,
 } from '#types';
 
@@ -28,11 +29,18 @@ interface WireToolCall {
   function: { name: string; arguments: string };
 }
 
+interface WireUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+}
+
 interface WireResponse {
   choices?: Array<{
     message?: { content?: string | null; tool_calls?: WireToolCall[] };
     finish_reason?: string;
   }>;
+  usage?: WireUsage | null;
   error?: { message?: string };
 }
 
@@ -47,6 +55,22 @@ interface WireStreamChunk {
     delta?: { content?: string | null; tool_calls?: WireDeltaToolCall[] };
     finish_reason?: string | null;
   }>;
+  // Streaming servers send `usage: null` on every delta chunk until the final
+  // include_usage tail — so this is nullable, not merely optional.
+  usage?: WireUsage | null;
+}
+
+/**
+ * Map the wire `usage` block to our TokenUsage, or undefined if absent.
+ * Treats null (what streams send before the tail chunk) the same as missing.
+ * Exported so it can be unit-tested without a live HTTP call.
+ */
+export function extractUsage(usage: WireUsage | null | undefined): TokenUsage | undefined {
+  if (usage == null) return undefined;
+  return {
+    inputTokens: usage.prompt_tokens ?? 0,
+    outputTokens: usage.completion_tokens ?? 0,
+  };
 }
 
 function toWireMessage(message: ChatMessage): Record<string, unknown> {
@@ -91,6 +115,8 @@ function buildRequestBody(
     })),
     temperature: request.temperature,
     stream,
+    // Ask the server to append a final usage-only chunk after the content.
+    ...(stream && { stream_options: { include_usage: true } }),
   });
 }
 
@@ -219,6 +245,7 @@ export function createOpenAICompatibleProvider(
         content: choice?.message?.content ?? null,
         toolCalls,
         finishReason: choice?.finish_reason ?? 'stop',
+        usage: extractUsage(body.usage),
       };
     },
 
@@ -243,6 +270,7 @@ export function createOpenAICompatibleProvider(
       let content = '';
       let sawContent = false;
       let finishReason = 'stop';
+      let usage: TokenUsage | undefined;
       // Sparse array indexed by the wire `index`; fragments accumulate in place.
       const partialCalls: ToolCall[] = [];
 
@@ -262,6 +290,9 @@ export function createOpenAICompatibleProvider(
           if (data === '[DONE]') continue;
 
           const parsed = JSON.parse(data) as WireStreamChunk;
+          if (parsed.usage != null) {
+            usage = extractUsage(parsed.usage); // the include_usage tail chunk
+          }
           const choice = parsed.choices?.[0];
           if (choice === undefined) continue;
 
@@ -300,6 +331,7 @@ export function createOpenAICompatibleProvider(
           (call): call is ToolCall => call !== undefined,
         ),
         finishReason,
+        usage,
       };
       // For streamed calls the saved response is the assembled result,
       // not the raw SSE frames.

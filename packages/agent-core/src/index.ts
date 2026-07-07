@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatProvider } from '@kevin.xie.toronto/llm-provider-abstraction';
+import type { ChatMessage, ChatProvider, TokenUsage } from '@kevin.xie.toronto/llm-provider-abstraction';
 import { z } from 'zod';
 
 import { builtinTools } from '#tools/builtin';
@@ -59,6 +59,8 @@ export interface AgentEvents {
   canUseTool?(name: string, args: string): Promise<boolean> | boolean;
   /** Fired after old messages were folded into a summary. */
   onCompaction?(messagesBefore: number, messagesAfter: number): void;
+  /** Fired once per model response that reported token usage. */
+  onUsage?(usage: TokenUsage): void;
 }
 
 export class Agent {
@@ -168,6 +170,10 @@ export class Agent {
         content: response.content,
         toolCalls: response.toolCalls.length > 0 ? response.toolCalls : undefined,
       });
+
+      if (response.usage !== undefined) {
+        this.events.onUsage?.(response.usage);
+      }
 
       if (response.content !== null && response.content !== '') {
         this.events.onText?.(response.content);
