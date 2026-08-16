@@ -1,4 +1,4 @@
-# @kevin.xie.toronto/coding-agent-code
+# @kevin.xie.toronto/my-mini-coding-agent
 
 ## 2.0.1
 
