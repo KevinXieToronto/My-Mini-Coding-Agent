@@ -13,7 +13,7 @@ Follow these steps exactly.
 
    ```md
    ---
-   "@kevin.xie.toronto/coding-agent-code": patch
+   "@kevin.xie.toronto/my-mini-coding-agent": patch
    ---
 
    A concise, present-tense summary of the change.
