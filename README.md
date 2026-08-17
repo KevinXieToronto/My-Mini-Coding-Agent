@@ -1,6 +1,6 @@
 # @kevin.xie.toronto/my-mini-coding-agent
 
-My Mini Coding Agent.
+My Mini Coding Agent. Kimi code
 
 ## Installation
 
